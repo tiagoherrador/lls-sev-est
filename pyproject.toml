@@ -1,0 +1,21 @@
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lls_sev_est"
+version = "0.5.2"
+description = "Leaf lesion severity estimation (KMeans + defoliation) with edge protection, visualization, and save utilities."
+authors = [{name = "Tiago Alejo Herrador"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "scikit-image",
+    "matplotlib"
+]
