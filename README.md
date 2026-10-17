@@ -1,16 +1,8 @@
 # LLS-SevEst – how much of a peanut leaflet is covered by late leaf spot?
 
-You scan the leaflets of a peanut branch, and **LLS-SevEst** tells you what **percentage of the leaf area is covered by late leaf spot lesions** (*Nothopassalora personata*), how many leaflets are missing, and a severity that also takes that defoliation into account.
+> **Research tool and proof of concept — not a finished diagnostic instrument.** It was compared with another software, not with a measured truth; see [Things to keep in mind](#things-to-keep-in-mind).
 
-![Output of LLS-SevEst on a scanned branch: original scan, detected leaflets, segmentation and summary](assets/example_output.png)
-
-*Output of the tool on one scanned branch (40 leaflets, 10 nodes): 2.27 % of the leaf area is lesion, no leaflets missing.*
-
-## Contents
-
-[Why it exists](#why-it-exists-and-what-it-is-for) · [How it works](#how-it-works) · [How well does it work?](#how-well-does-it-work) · [Install and use](#install-and-use) · [What is in this repository](#what-is-in-this-repository) · [How it got here](#how-it-got-here) · [Things to keep in mind](#things-to-keep-in-mind) · [How to cite](#how-to-cite) · [Authors](#authors)
-
-## Why it exists, and what it is for
+## What this project is
 
 Late leaf spot is the most damaging foliar disease of peanut in the world. Under favourable conditions (about 95 % relative humidity and 18 °C) and without good management, it can cause losses above 50 %. It shows up as dark spots with a yellow halo that grow, join together and reduce the leaf area that can photosynthesise.
 
@@ -18,12 +10,31 @@ To test fungicides or compare cultivars, someone has to measure *how severe* the
 
 LLS-SevEst is a **proof of concept** of that: a simple, transparent, unsupervised machine-learning method (K-means) that measures severity from a flatbed scan. It is meant for **research work such as fungicide trials and resistance evaluations**, not as a finished diagnostic instrument. It also encourages keeping a record of the images that are measured, which makes the measurement more transparent and repeatable.
 
+You scan the leaflets of a peanut branch, and the tool tells you what **percentage of the leaf area is covered by late leaf spot lesions** (*Nothopassalora personata*), how many leaflets are missing, and a severity that also takes that defoliation into account.
+
 It comes from two works (see "How to cite" at the end):
 
 1. **LLS-SevEst** (Revista de Investigaciones Agropecuarias, 2025): the first model, on single leaflets.
 2. **LLS-SevEst 2.0** (40th National Peanut Conference, 2025): better segmentation, all the leaflets of a branch in one scan, and a leaflet counter to account for defoliation. This is what the package in this repository contains.
 
 (In my first notebooks and in a 2024 abstract the tool was still called *ViruDet*.)
+
+**My role:** data scientist and developer of the software (the method and the `lls_sev_est` package).
+
+## The short version
+
+| Question | What I found |
+|---|---|
+| Does it agree with a reference? | **Closely, on 50 leaves.** Against Pliman (an R package for plant image analysis), K-means reaches a correlation of **0.99** and an average error of **4.6 points**, much better than the threshold methods it replaced (0.76–0.80). |
+| Is that reference a truth? | **No.** Pliman can also mark healthy tissue as lesion. There is no measured truth here, and the 13 severe leaves where the two disagree most are an open question. |
+| Is the error the same everywhere? | **No.** On mild leaves (up to 10 %) it reads about 3.6 points higher than Pliman; on severe ones (above 25 %) about 6.7 points lower. |
+| What did version 2.0 add? | The whole branch in one scan, fewer false lesions on veins and light areas, and a leaflet counter (38 of 39 leaflets in the last test) for a severity adjusted by defoliation. It was judged by eye, with no numerical comparison yet. |
+
+## What it gives you
+
+![Output of LLS-SevEst on a scanned branch: original scan, detected leaflets, segmentation and summary](assets/example_output.png)
+
+*Output of the tool on one scanned branch (40 leaflets, 10 nodes): 2.27 % of the leaf area is lesion, no leaflets missing.*
 
 ## How it works
 
@@ -33,6 +44,13 @@ It comes from two works (see "How to cite" at the end):
 4. **Describe every pixel with 12 numbers.** Colour (red, green, blue), the differences between colours (red − green, red − blue, blue − green), how sharply brightness changes around it, how far it is from the centre of the image, the share of each colour in the pixel, and a local texture pattern (LBP). The image is smoothed with a median filter first, and all the numbers are put on the same scale.
 5. **Sort the pixels into three groups with K-means.** K-means finds groups of similar pixels by itself, so no labelled examples are needed. The groups are then sorted by the sum of the values of their centres: the first is taken as *healthy tissue*, the last as *lesion*, and the one in between is left out of the count. (The code never checks that this order really puts the lesion last.)
 6. **Count.** Severity = lesion pixels ÷ (lesion + healthy pixels) inside the edge-protected leaf area. The **adjusted severity** combines it with defoliation: 1 − (1 − severity) × (1 − defoliation).
+
+## Following the project step by step
+
+<details>
+<summary><b>Show the three steps</b> (what version 2.0 changed, the comparison with Pliman, the path from thresholds to K-means)</summary>
+
+### 1. Version 2.0: fewer false lesions, and counting the leaflets
 
 ![A scan of the leaflets of one branch segmented by the original model and by LLS-SevEst 2.0](assets/v2_1_original_vs_2_0.png)
 
@@ -44,7 +62,7 @@ It comes from two works (see "How to cite" at the end):
 
 *The green outlines are the detected leaflets; the red circles mark the two false detections caused by the scanner borders.*
 
-## How well does it work?
+### 2. How well does it work?
 
 This is the part to read carefully, because the tool was only compared with another software, not with a measured truth.
 
@@ -75,7 +93,35 @@ What I take from it:
 
 **The 2.0 version (second work): six branches, looked at by eye.** It was tried on six lateral branches from six plants with different severity. The improvement was judged by looking at the segmentation (it fixed the false lesions on veins and on lighter areas) and by counting leaflets (38 of 39 in the last case). **There is no comparison with Pliman or with a measured reference for this version.**
 
-## Install and use
+### 3. How it got here: the path to the tool
+
+The tool is the end of a path of trial and error: a fixed brightness threshold (many false positives), morphology and a threshold chosen by hand (not automatic), then colour, PCA and K-means (which failed on 11 of 50 leaves until I standardised the features), a supervised model that turned out to be a dead end, and, in 2025, a search for better pixel features and a leaflet counter that at first counted the scanner's own borders.
+
+The notebooks in [`notebooks/exploration/`](notebooks/exploration/) are my original Colab notebooks, cleaned up: the experiments are the same, repeated cells became functions and the code is documented. They are saved without outputs and need the scans and data tables (not included), except the last one, which keeps its outputs.
+
+| Notebook | What it covers |
+|---|---|
+| [`01_grayscale_threshold_morphology`](notebooks/exploration/01_grayscale_threshold_morphology.ipynb) | Brightness only: histograms, fixed threshold, Otsu, adaptive threshold, morphology, threshold chosen by hand |
+| [`02_color_features_pca_kmeans`](notebooks/exploration/02_color_features_pca_kmeans.ipynb) | Colour differences, PCA, K-means, ordering the groups, raw against standardised features |
+| [`03_knn_dead_end`](notebooks/exploration/03_knn_dead_end.ipynb) | A k-nearest-neighbours classifier trained on K-means labels |
+| [`04_v2_branch_scans`](notebooks/exploration/04_v2_branch_scans.ipynb) | Version 2.0: 18 sets of pixel features, the leaflet counter and its parameter sweeps, defoliation |
+| [`05_validation_vs_pliman`](notebooks/exploration/05_validation_vs_pliman.ipynb) | The comparison with Pliman (outputs included; needs the per-leaf table, not included) |
+
+</details>
+
+## Things to keep in mind
+
+These are the limitations that the articles themselves point out:
+
+- **It is an early-stage proof of concept,** not a reference method.
+- **Small and narrow data:** 50 leaves to build the model (out of 190), grown under controlled conditions, with one scanner, and six branches for version 2.0.
+- **Unsupervised method:** it does not learn from labelled examples, which limits how well it generalises to other genotypes, scanners or environments.
+- **No formal validation** (accuracy, precision, recall). The comparison is against Pliman, which can also be wrong.
+- **The threshold may need manual adjustment** in some images, which reduces automation.
+- **The leaflet counter still needs adjustments** to find all the leaflets in every image.
+- The authors suggest using convolutional neural networks and a larger, more varied dataset in the future.
+
+## Try it yourself
 
 ```bash
 pip install .
@@ -94,43 +140,17 @@ save_results(results, "outputs/results.xlsx")
 
 A demo is in `notebooks/demo_lls_sev_est.ipynb`. The scans are not included; the data of the study are available from the corresponding author on reasonable request.
 
-## What is in this repository
+### What is in this repository
 
 ```
 lls_sev_est/                     the package (version 0.5.2, the 2.0 tool)
 notebooks/
   demo_lls_sev_est.ipynb         how to use the package
-  exploration/                   the path that led to the tool, cleaned up (see below)
+  exploration/                   the path that led to the tool, cleaned up (step 3 above)
 assets/                          figures
 ```
 
 The scans, the tables behind the article figures and the model-comparison data are not included; they are available from the corresponding author on reasonable request.
-
-## How it got here
-
-The tool is the end of a path of trial and error: a fixed brightness threshold (many false positives), morphology and a threshold chosen by hand (not automatic), then colour, PCA and K-means (which failed on 11 of 50 leaves until I standardised the features), a supervised model that turned out to be a dead end, and, in 2025, a search for better pixel features and a leaflet counter that at first counted the scanner's own borders.
-
-The notebooks in [`notebooks/exploration/`](notebooks/exploration/) are my original Colab notebooks, cleaned up: the experiments are the same, repeated cells became functions and the code is documented. They are saved without outputs and need the scans and data tables (not included), except the last one, which keeps its outputs.
-
-| Notebook | What it covers |
-|---|---|
-| [`01_grayscale_threshold_morphology`](notebooks/exploration/01_grayscale_threshold_morphology.ipynb) | Brightness only: histograms, fixed threshold, Otsu, adaptive threshold, morphology, threshold chosen by hand |
-| [`02_color_features_pca_kmeans`](notebooks/exploration/02_color_features_pca_kmeans.ipynb) | Colour differences, PCA, K-means, ordering the groups, raw against standardised features |
-| [`03_knn_dead_end`](notebooks/exploration/03_knn_dead_end.ipynb) | A k-nearest-neighbours classifier trained on K-means labels |
-| [`04_v2_branch_scans`](notebooks/exploration/04_v2_branch_scans.ipynb) | Version 2.0: 18 sets of pixel features, the leaflet counter and its parameter sweeps, defoliation |
-| [`05_validation_vs_pliman`](notebooks/exploration/05_validation_vs_pliman.ipynb) | The comparison with Pliman (outputs included; needs the per-leaf table, not included) |
-
-## Things to keep in mind
-
-These are the limitations that the articles themselves point out:
-
-- **It is an early-stage proof of concept,** not a reference method.
-- **Small and narrow data:** 50 leaves to build the model (out of 190), grown under controlled conditions, with one scanner, and six branches for version 2.0.
-- **Unsupervised method:** it does not learn from labelled examples, which limits how well it generalises to other genotypes, scanners or environments.
-- **No formal validation** (accuracy, precision, recall). The comparison is against Pliman, which can also be wrong.
-- **The threshold may need manual adjustment** in some images, which reduces automation.
-- **The leaflet counter still needs adjustments** to find all the leaflets in every image.
-- The authors suggest using convolutional neural networks and a larger, more varied dataset in the future.
 
 ## How to cite
 
@@ -139,6 +159,6 @@ These are the limitations that the articles themselves point out:
 
 ## Authors
 
-Developed by Tiago A. Herrador and Juliana Migotti Scaglia (Instituto Universitario de Ciencias Biomédicas de Córdoba, IUCBC), with Juan Andrés Paredes and Luis Ignacio Cazón (INTA, IPAVE-CIAP; UFyMA-CONICET). MIT licensed.
+Developed by Tiago A. Herrador (data scientist and software developer) and Juliana Migotti Scaglia (Instituto Universitario de Ciencias Biomédicas de Córdoba, IUCBC), with Juan Andrés Paredes and Luis Ignacio Cazón (INTA, IPAVE-CIAP; UFyMA-CONICET). MIT licensed.
 
 > **Note:** originally developed and run in Google Colab. Google-Drive mounting cells were removed, Drive paths were rewritten as relative paths and outputs were stripped. The paths and cleanup were **not re-executed** after this change, so expect to adjust paths.
